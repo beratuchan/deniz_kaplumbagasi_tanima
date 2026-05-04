@@ -1,0 +1,23 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Outputs
+outputs/
+logs/
+*.pth
+
+# Data (büyük dosyalar)
+data/raw/images/
+data/processed/
+splits/*.txt   # isteğe bağlı, içinde yollar var ama küçük
+data/mean_std.json
+
+# IDE
+.vscode/
+.idea/
