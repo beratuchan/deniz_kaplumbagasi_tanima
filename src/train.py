@@ -34,7 +34,7 @@ if __name__ == "__main__":
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Kullanılan cihaz: {DEVICE}")
 
-    # ---------- ETİKET MAPPING (TÜM BİREYLER) ----------
+    # ---------- ETİKET MAPPING ----------
     def get_label_mapping():
         annot_path = Path("C:/turtle_project/data/raw/annotations.json")
         with open(annot_path, 'r') as f:
@@ -44,7 +44,7 @@ if __name__ == "__main__":
         return label_map, len(unique_ids)
 
     label_map, num_classes = get_label_mapping()
-    print(f"Toplam sınıf (birey) sayısı: {num_classes}")
+    print(f"Toplam sınıf sayısı: {num_classes}")
 
     # ---------- CLASS WEIGHTS ----------
     def compute_class_weights(train_paths, label_map):
@@ -60,21 +60,26 @@ if __name__ == "__main__":
         train_paths = [line.strip() for line in f.readlines()]
     class_weights = compute_class_weights(train_paths, label_map)
 
+    # ---------- VERİYE ÖZEL MEAN/STD ----------
+    with open(Path("C:/turtle_project/data/mean_std.json"), 'r') as f:
+        mean_std = json.load(f)
+        mean = mean_std["mean"]
+        std = mean_std["std"]
+
     # ---------- DATALOADERS ----------
     train_dataset = TurtleDataset(
         split_file=SPLITS_DIR / "train.txt",
         img_root=DATA_ROOT,
         label_map=label_map,
-        transform=get_train_transform()
+        transform=get_train_transform(mean=mean, std=std)
     )
     val_dataset = TurtleDataset(
         split_file=SPLITS_DIR / "val.txt",
         img_root=DATA_ROOT,
         label_map=label_map,
-        transform=get_val_transform()
+        transform=get_val_transform(mean=mean, std=std)
     )
 
-    # Windows'ta num_workers=0 yeterli, ama kod bloğu sayesinde artık worker kullanılabilir
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=True)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0, pin_memory=True)
 
@@ -82,7 +87,6 @@ if __name__ == "__main__":
     model = TurtleClassifier(num_classes=num_classes, pretrained=True).to(DEVICE)
     criterion = nn.CrossEntropyLoss(weight=class_weights)
 
-    # FC katmanı parametrelerini ayır
     backbone_params = []
     fc_params = []
     for name, param in model.backbone.named_parameters():
@@ -97,11 +101,9 @@ if __name__ == "__main__":
     ], weight_decay=WEIGHT_DECAY)
 
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=3)
-
-    # AMP scaler
     scaler = torch.amp.GradScaler('cuda') if DEVICE.type == 'cuda' else None
 
-    # ---------- EĞİTİM DÖNGÜSÜ ----------
+    # ---------- EĞİTİM ----------
     best_val_rank1 = 0.0
     patience_counter = 0
 
