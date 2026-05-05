@@ -15,14 +15,11 @@ from utils import compute_metrics
 if __name__ == "__main__":
     multiprocessing.freeze_support()
     
-    # ---------- KONFİG ----------
     DATA_ROOT = Path("C:/turtle_project/data/raw")
     SPLITS_DIR = Path("C:/turtle_project/splits")
     OUTPUT_DIR = Path("C:/turtle_project/outputs")
     CHECKPOINT_DIR = OUTPUT_DIR / "checkpoints"
-    LOG_DIR = OUTPUT_DIR / "logs"
     CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     BATCH_SIZE = 128
     NUM_EPOCHS = 50
@@ -30,11 +27,11 @@ if __name__ == "__main__":
     LEARNING_RATE_CLASSIFIER = 1e-3
     WEIGHT_DECAY = 1e-4
     PATIENCE = 5
+    LABEL_SMOOTHING = 0.1   # YENİ
 
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Kullanılan cihaz: {DEVICE}")
 
-    # ---------- ETİKET MAPPING ----------
     def get_label_mapping():
         annot_path = Path("C:/turtle_project/data/raw/annotations.json")
         with open(annot_path, 'r') as f:
@@ -46,27 +43,21 @@ if __name__ == "__main__":
     label_map, num_classes = get_label_mapping()
     print(f"Toplam sınıf sayısı: {num_classes}")
 
-    # ---------- CLASS WEIGHTS ----------
-    def compute_class_weights(train_paths, label_map):
-        counts = np.zeros(num_classes)
-        for path in train_paths:
-            label = label_map[Path(path).parent.name]
-            counts[label] += 1
-        weights = 1.0 / (counts + 1e-6)
-        weights = weights / weights.sum() * num_classes
-        return torch.from_numpy(weights).float().to(DEVICE)
-
+    # Class weights
     with open(SPLITS_DIR / "train.txt", 'r') as f:
         train_paths = [line.strip() for line in f.readlines()]
-    class_weights = compute_class_weights(train_paths, label_map)
+    counts = np.zeros(num_classes)
+    for path in train_paths:
+        label = label_map[Path(path).parent.name]
+        counts[label] += 1
+    class_weights = 1.0 / (counts + 1e-6)
+    class_weights = class_weights / class_weights.sum() * num_classes
+    class_weights = torch.from_numpy(class_weights).float().to(DEVICE)
 
-    # ---------- VERİYE ÖZEL MEAN/STD ----------
-    with open(Path("C:/turtle_project/data/mean_std.json"), 'r') as f:
-        mean_std = json.load(f)
-        mean = mean_std["mean"]
-        std = mean_std["std"]
+    # ImageNet mean/std
+    mean = [0.485, 0.456, 0.406]
+    std = [0.229, 0.224, 0.225]
 
-    # ---------- DATALOADERS ----------
     train_dataset = TurtleDataset(
         split_file=SPLITS_DIR / "train.txt",
         img_root=DATA_ROOT,
@@ -83,17 +74,11 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=True)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0, pin_memory=True)
 
-    # ---------- MODEL ----------
-    model = TurtleClassifier(num_classes=num_classes, pretrained=True).to(DEVICE)
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
+    model = TurtleClassifier(num_classes=num_classes, pretrained=True, dropout_rate=0.5).to(DEVICE)
+    criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=LABEL_SMOOTHING)
 
-    backbone_params = []
-    fc_params = []
-    for name, param in model.backbone.named_parameters():
-        if 'fc' in name:
-            fc_params.append(param)
-        else:
-            backbone_params.append(param)
+    backbone_params = [p for n, p in model.backbone.named_parameters() if 'fc' not in n]
+    fc_params = [p for n, p in model.backbone.named_parameters() if 'fc' in n]
 
     optimizer = optim.AdamW([
         {'params': backbone_params, 'lr': LEARNING_RATE_BACKBONE},
@@ -103,7 +88,6 @@ if __name__ == "__main__":
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=3)
     scaler = torch.amp.GradScaler('cuda') if DEVICE.type == 'cuda' else None
 
-    # ---------- EĞİTİM ----------
     best_val_rank1 = 0.0
     patience_counter = 0
 
@@ -115,7 +99,6 @@ if __name__ == "__main__":
         for images, labels in progress:
             images, labels = images.to(DEVICE), labels.to(DEVICE)
             optimizer.zero_grad()
-            
             if DEVICE.type == 'cuda':
                 with torch.amp.autocast('cuda'):
                     outputs = model(images)
@@ -128,15 +111,13 @@ if __name__ == "__main__":
                 loss = criterion(outputs, labels)
                 loss.backward()
                 optimizer.step()
-            
             train_loss += loss.item() * images.size(0)
             metrics = compute_metrics(outputs, labels)
             train_rank1 += metrics['rank1'] * images.size(0)
             progress.set_postfix(loss=loss.item(), rank1=metrics['rank1'])
-        
         train_loss /= len(train_loader.dataset)
         train_rank1 /= len(train_loader.dataset)
-        
+
         model.eval()
         val_loss = 0.0
         val_rank1 = 0.0
@@ -150,15 +131,14 @@ if __name__ == "__main__":
                 metrics = compute_metrics(outputs, labels)
                 val_rank1 += metrics['rank1'] * images.size(0)
                 val_rank5 += metrics['rank5'] * images.size(0)
-        
         val_loss /= len(val_loader.dataset)
         val_rank1 /= len(val_loader.dataset)
         val_rank5 /= len(val_loader.dataset)
-        
+
         print(f"Epoch {epoch+1}: Train Loss={train_loss:.4f}, Train R1={train_rank1:.4f} | Val Loss={val_loss:.4f}, Val R1={val_rank1:.4f}, Val R5={val_rank5:.4f}")
-        
+
         scheduler.step(val_rank1)
-        
+
         if val_rank1 > best_val_rank1:
             best_val_rank1 = val_rank1
             torch.save(model.state_dict(), CHECKPOINT_DIR / "best_model.pth")

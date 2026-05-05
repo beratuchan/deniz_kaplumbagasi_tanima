@@ -4,8 +4,8 @@ import cv2
 import numpy as np
 from pathlib import Path
 from albumentations import (
-    HorizontalFlip, Rotate, RandomBrightnessContrast,
-    HueSaturationValue, GaussNoise, Compose, Resize, Normalize
+    HorizontalFlip, Rotate, RandomResizedCrop, RandomBrightnessContrast,
+    HueSaturationValue, GaussNoise, Compose, Normalize, Resize
 )
 
 class TurtleDataset(Dataset):
@@ -44,12 +44,12 @@ class TurtleDataset(Dataset):
 
 def get_train_transform(mean, std, target_size=(256,256)):
     return Compose([
-        Resize(height=target_size[0], width=target_size[1]),
+        RandomResizedCrop(size=target_size, scale=(0.9, 1.0)),
+        Rotate(limit=15, p=0.5),
         HorizontalFlip(p=0.5),
-        Rotate(limit=15, p=0.5),            # RandomRotation ±15°
         RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),
         HueSaturationValue(hue_shift_limit=10, sat_shift_limit=20, val_shift_limit=10, p=0.5),
-        GaussNoise(var_limit=(10.0, 50.0), p=0.3),
+        GaussNoise(std_range=(10.0/255.0, 50.0/255.0), p=0.3),
         Normalize(mean=mean, std=std)
     ])
 
