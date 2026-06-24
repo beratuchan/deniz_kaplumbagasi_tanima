@@ -16,9 +16,10 @@ if __name__ == "__main__":
     multiprocessing.freeze_support()
     
     # ---------- KONFİG ----------
-    DATA_ROOT = Path("C:/turtle_project/data/raw")
-    SPLITS_DIR = Path("C:/turtle_project/splits")
-    OUTPUT_DIR = Path("C:/turtle_project/outputs")
+    PROJECT_ROOT = Path(__file__).parent.parent
+    DATA_ROOT = PROJECT_ROOT / "data"
+    SPLITS_DIR = PROJECT_ROOT / "splits"
+    OUTPUT_DIR = PROJECT_ROOT / "outputs"
     CHECKPOINT_DIR = OUTPUT_DIR / "checkpoints"
     LOG_DIR = OUTPUT_DIR / "logs"
     CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
@@ -36,7 +37,7 @@ if __name__ == "__main__":
 
     # ---------- ETİKET MAPPING (TÜM BİREYLER) ----------
     def get_label_mapping():
-        annot_path = Path("C:/turtle_project/data/raw/annotations.json")
+        annot_path = Path(__file__).parent.parent / "data" / "raw" / "annotations.json"
         with open(annot_path, 'r') as f:
             data = json.load(f)
         unique_ids = sorted(set(ann["identity"] for ann in data["annotations"]))

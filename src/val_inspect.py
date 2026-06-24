@@ -5,9 +5,8 @@ import numpy as np
 from pathlib import Path
 import sys
 
-project_root = Path("C:/turtle_project")
-src_path = project_root / "src"
-sys.path.insert(0, str(src_path))
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(Path(__file__).parent))
 
 from model import TurtleClassifier
 from dataset import get_val_transform
@@ -15,7 +14,7 @@ from dataset import get_val_transform
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Label mapping
-annot_path = project_root / "data/raw/annotations.json"
+annot_path = project_root / "data" / "raw" / "annotations.json"
 with open(annot_path, "r") as f:
     data = json.load(f)
 unique_ids = sorted(set(ann["identity"] for ann in data["annotations"]))

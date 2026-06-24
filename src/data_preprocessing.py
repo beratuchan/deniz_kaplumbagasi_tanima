@@ -8,11 +8,12 @@ from tqdm import tqdm
 from datetime import datetime
 
 # ---------- KONFİG ----------
-RAW_IMAGES_DIR = Path(r"C:\turtle_project\data\raw")
-PROCESSED_IMAGES_DIR = Path(r"C:\turtle_project\data\processed\images_resized")
-ANNOT_PATH = Path(r"C:\turtle_project\data\raw\annotations.json")
-SPLITS_DIR = Path(r"C:\turtle_project\splits")
-MEAN_STD_PATH = Path(r"C:\turtle_project\data\mean_std.json")
+PROJECT_ROOT = Path(__file__).parent.parent
+RAW_IMAGES_DIR = PROJECT_ROOT / "data"
+PROCESSED_IMAGES_DIR = PROJECT_ROOT / "data" / "processed" / "images_resized"
+ANNOT_PATH = PROJECT_ROOT / "data" / "raw" / "annotations.json"
+SPLITS_DIR = PROJECT_ROOT / "splits"
+MEAN_STD_PATH = PROJECT_ROOT / "data" / "mean_std.json"
 
 TARGET_SIZE = (256, 256)
 TRAIN_RATIO = 0.70

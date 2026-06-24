@@ -1,7 +1,7 @@
 import cv2
 from pathlib import Path
 
-val_txt = Path("C:/turtle_project/splits/val.txt")
+val_txt = Path(__file__).parent.parent / "splits" / "val.txt"
 with open(val_txt) as f:
     paths = [line.strip() for line in f.readlines()]
 

@@ -15,7 +15,9 @@ logs/
 # Data (büyük dosyalar)
 data/raw/images/
 data/processed/
-splits/*.txt   # isteğe bağlı, içinde yollar var ama küçük
+splits/
+data/images/
+data/license.txt
 data/mean_std.json
 
 # IDE
